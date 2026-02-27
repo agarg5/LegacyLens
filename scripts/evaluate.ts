@@ -245,11 +245,14 @@ interface EvalReport {
 
 async function evaluate() {
   console.log(`\n=== LegacyLens Evaluation Suite ===\n`);
-  console.log(`Running ${TEST_CASES.length} test cases across ${new Set(TEST_CASES.map((t) => t.mode)).size} modes...\n`);
+  const totalCount = TEST_CASES.length;
+  const modeCount = new Set(TEST_CASES.map((t) => t.mode)).size;
+  console.log(`Running ${totalCount} test cases across ${modeCount} modes (concurrency=4)...\n`);
 
   // Run test cases with concurrency to reduce wall time
   const CONCURRENCY = 4;
   const results: EvalResult[] = [];
+  let completed = 0;
 
   async function runTestCase(tc: EvalTestCase): Promise<EvalResult> {
     const modeConfig = tc.mode !== "general" ? MODE_CONFIGS[tc.mode] : null;
@@ -318,8 +321,12 @@ async function evaluate() {
 
     for (const result of batchResults) {
       results.push(result);
+      completed++;
+      const pct = Math.round((completed / totalCount) * 100);
+      const bar = "█".repeat(Math.round(pct / 5)) + "░".repeat(20 - Math.round(pct / 5));
       const icon = result.overallPass ? "✓" : "✗";
       const modeTag = `[${result.mode}]`.padEnd(17);
+      process.stdout.write(`\r  [${bar}] ${pct}% (${completed}/${totalCount})\n`);
       console.log(`  ${icon} ${modeTag} [retrieval=${result.retrievalLatencyMs}ms total=${result.totalLatencyMs}ms] ${result.description}`);
       if (!result.overallPass) {
         console.log(`    retrieval=${result.retrievalRelevant} response=${result.responseRelevant} (${result.responseChecksPassed}/${result.responseChecksTotal} checks)`);
@@ -433,7 +440,119 @@ async function evaluate() {
   await mkdir(reportsDir, { recursive: true });
   const reportPath = resolve(reportsDir, "evaluation.json");
   await writeFile(reportPath, JSON.stringify(report, null, 2));
-  console.log(`\nReport saved to ${reportPath}\n`);
+  // ─── Generate HTML report ─────────────────────────────────────────
+
+  const htmlPath = resolve(reportsDir, "evaluation.html");
+  const passColor = "#22c55e";
+  const failColor = "#ef4444";
+  const infoColor = "#3b82f6";
+
+  const detailRows = results
+    .map((r) => {
+      const statusColor = r.overallPass ? passColor : failColor;
+      const statusText = r.overallPass ? "PASS" : "FAIL";
+      return `<tr>
+        <td><span style="color:${statusColor};font-weight:bold">${statusText}</span></td>
+        <td>${r.mode}</td>
+        <td>${r.description}</td>
+        <td>${r.retrievalLatencyMs}ms</td>
+        <td>${r.totalLatencyMs}ms</td>
+        <td>${r.retrievalRelevant ? "✓" : "✗"}</td>
+        <td>${r.responseChecksPassed}/${r.responseChecksTotal}</td>
+        <td>${r.topScore.toFixed(3)}</td>
+      </tr>`;
+    })
+    .join("\n");
+
+  const modeRows = modeStats
+    .map((ms) => `<tr>
+      <td style="font-weight:bold">${ms.mode}</td>
+      <td>${ms.testCases}</td>
+      <td>${(ms.overallPassRate * 100).toFixed(0)}%</td>
+      <td>${(ms.retrievalPrecision * 100).toFixed(0)}%</td>
+      <td>${(ms.responsePrecision * 100).toFixed(0)}%</td>
+      <td>${ms.p95RetrievalLatencyMs}ms</td>
+      <td>${ms.p95TotalLatencyMs}ms</td>
+    </tr>`)
+    .join("\n");
+
+  const targetRows = [
+    { name: "Retrieval Latency P95", pass: latencyPass, actual: `${retP95}ms`, target: "≤3000ms" },
+    { name: "Retrieval Precision", pass: retrievalPass, actual: `${(overallRetrieval * 100).toFixed(0)}%`, target: "≥70%" },
+    { name: "Overall Pass Rate", pass: passRatePass, actual: `${(overallPassRate * 100).toFixed(0)}%`, target: "≥60%" },
+  ]
+    .map((t) => `<tr>
+      <td><span style="color:${t.pass ? passColor : failColor};font-weight:bold">${t.pass ? "PASS" : "FAIL"}</span></td>
+      <td>${t.name}</td>
+      <td>${t.actual}</td>
+      <td>${t.target}</td>
+    </tr>`)
+    .join("\n");
+
+  const allTargetsPassed = latencyPass && retrievalPass && passRatePass;
+  const overallBadge = allTargetsPassed
+    ? `<span style="background:${passColor};color:white;padding:4px 12px;border-radius:4px;font-weight:bold">ALL TARGETS PASSING</span>`
+    : `<span style="background:${failColor};color:white;padding:4px 12px;border-radius:4px;font-weight:bold">SOME TARGETS FAILING</span>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegacyLens Evaluation Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; background: #f9fafb; color: #111827; }
+    h1 { border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+    h2 { margin-top: 32px; color: #374151; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    th { background: #1f2937; color: white; text-align: left; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 8px 14px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 16px 0; }
+    .stat-card { background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-value { font-size: 28px; font-weight: bold; color: #1f2937; }
+    .stat-label { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    .timestamp { color: #9ca3af; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>LegacyLens Evaluation Report</h1>
+  <p class="timestamp">Generated: ${report.timestamp}</p>
+  <p>${overallBadge}</p>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-value">${results.length}</div><div class="stat-label">Test Cases</div></div>
+    <div class="stat-card"><div class="stat-value">${(overallPassRate * 100).toFixed(0)}%</div><div class="stat-label">Pass Rate</div></div>
+    <div class="stat-card"><div class="stat-value">${(overallRetrieval * 100).toFixed(0)}%</div><div class="stat-label">Retrieval Precision</div></div>
+    <div class="stat-card"><div class="stat-value">${retP95}ms</div><div class="stat-label">Retrieval P95</div></div>
+    <div class="stat-card"><div class="stat-value">${totP95}ms</div><div class="stat-label">Total P95 (incl. LLM)</div></div>
+  </div>
+
+  <h2>Targets</h2>
+  <table>
+    <tr><th>Status</th><th>Metric</th><th>Actual</th><th>Target</th></tr>
+    ${targetRows}
+    <tr><td><span style="color:${infoColor};font-weight:bold">INFO</span></td><td>Total Latency P95</td><td>${totP95}ms</td><td>Informational</td></tr>
+  </table>
+
+  <h2>Per-Mode Breakdown</h2>
+  <table>
+    <tr><th>Mode</th><th>Cases</th><th>Pass Rate</th><th>Retrieval</th><th>Response</th><th>Ret P95</th><th>Total P95</th></tr>
+    ${modeRows}
+  </table>
+
+  <h2>Test Case Details</h2>
+  <table>
+    <tr><th>Status</th><th>Mode</th><th>Description</th><th>Retrieval</th><th>Total</th><th>File Match</th><th>Resp Checks</th><th>Top Score</th></tr>
+    ${detailRows}
+  </table>
+</body>
+</html>`;
+
+  await writeFile(htmlPath, html);
+  console.log(`\nReports saved to:`);
+  console.log(`  JSON: ${reportPath}`);
+  console.log(`  HTML: ${htmlPath}\n`);
 
   // Exit with error if targets not met
   const allPassed = latencyPass && retrievalPass && passRatePass;
