@@ -2,7 +2,7 @@
 
 ## System Overview
 
-LegacyLens is a Retrieval-Augmented Generation (RAG) system that makes legacy COBOL codebases queryable through natural language. It targets the **GnuCOBOL** compiler -- an open-source COBOL compiler with 100K+ lines of code across 50+ files (.cob, .cbl, .cpy, .c, .h). Users ask questions in plain English and receive cited, contextual answers grounded in the actual source code.
+LegacyLens is a Retrieval-Augmented Generation (RAG) system that makes legacy COBOL codebases queryable through natural language. It targets the **GnuCOBOL** compiler -- an open-source COBOL compiler with well over 10,000 lines of code across 50+ files (.cob, .cbl, .cpy, .cobcopy, .c, .h, .y, .l, .def, .conf, .words). Users ask questions in plain English and receive cited, contextual answers grounded in the actual source code.
 
 ## Architecture Diagram
 
@@ -53,7 +53,7 @@ LegacyLens is a Retrieval-Augmented Generation (RAG) system that makes legacy CO
 
 The ingestion script (`scripts/ingest.ts`) runs offline in three stages:
 
-1. **File Discovery** -- Recursively walks the GnuCOBOL source tree, collecting `.cob`, `.cbl`, `.cpy`, `.c`, and `.h` files with their contents and metadata.
+1. **File Discovery** -- Recursively walks the GnuCOBOL source tree, collecting `.cob`, `.cbl`, `.cpy`, `.cobcopy`, `.c`, `.h`, `.y`, `.l`, `.def`, `.conf`, and `.words` files with their contents and metadata.
 
 2. **COBOL-Aware Chunking** -- COBOL files are split at structural boundaries using regex detection of DIVISION, SECTION, paragraph, and level-01 data item markers. Each chunk preserves:
    - `filePath`, `startLine`, `endLine` for precise citation
@@ -89,7 +89,7 @@ Four specialized modes customize the retrieval and generation pipeline through p
 | **Explain**       | 5    | (none)                        | Plain-English code walkthrough, control flow   |
 | **Dependencies**  | 10   | "CALL PERFORM COPY dependencies of" | CALL/PERFORM graphs, data items, copybooks |
 | **Documentation** | 8    | "documentation overview of"   | Structured reference docs (inputs, outputs, flow) |
-| **Business Logic**| 8    | "business rules conditions..." | IF/EVALUATE rules, calculations, validations  |
+| **Business Logic**| 8    | "business rules conditions calculations validations in" | IF/EVALUATE rules, calculations, validations  |
 
 Each mode uses a detailed system prompt that instructs the LLM to produce structured output (numbered sections, markdown formatting) tailored to that analysis type.
 
