@@ -4,9 +4,28 @@ import { useState, useCallback } from "react";
 import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
+import ModeSelector from "@/components/ModeSelector";
+import type { Mode } from "@/components/ModeSelector";
 import type { SearchResult } from "@/lib/types";
 
+const PLACEHOLDERS: Record<Mode, string> = {
+  query: "Ask about the GnuCOBOL codebase...",
+  explain: "Enter a program, section, or paragraph name to explain...",
+  dependencies: "Enter a program or section to map dependencies...",
+  documentation: "Enter a program or module to generate documentation...",
+  "business-logic": "Enter a program or section to extract business rules...",
+};
+
+const ANSWER_TITLES: Record<Mode, string> = {
+  query: "Answer",
+  explain: "Explanation",
+  dependencies: "Dependency Map",
+  documentation: "Documentation",
+  "business-logic": "Business Logic",
+};
+
 export default function Home() {
+  const [mode, setMode] = useState<Mode>("query");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -25,10 +44,14 @@ export default function Home() {
     const start = Date.now();
 
     try {
-      const res = await fetch("/api/query/stream", {
+      const isAnalyze = mode !== "query";
+      const endpoint = isAnalyze ? "/api/analyze/stream" : "/api/query/stream";
+      const body = isAnalyze ? { query, mode } : { query };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -71,7 +94,7 @@ export default function Home() {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, []);
+  }, [mode]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -86,9 +109,18 @@ export default function Home() {
           </p>
         </div>
 
+        {/* Mode Selector */}
+        <div className="mb-4">
+          <ModeSelector mode={mode} onModeChange={setMode} />
+        </div>
+
         {/* Search */}
         <div className="mb-8">
-          <SearchInput onSearch={handleSearch} isLoading={isLoading} />
+          <SearchInput
+            onSearch={handleSearch}
+            isLoading={isLoading}
+            placeholder={PLACEHOLDERS[mode]}
+          />
         </div>
 
         {/* Error */}
@@ -101,7 +133,11 @@ export default function Home() {
         {/* Answer Panel */}
         {(answer || isStreaming) && (
           <div className="mb-8">
-            <AnswerPanel answer={answer} isStreaming={isStreaming} />
+            <AnswerPanel
+              answer={answer}
+              isStreaming={isStreaming}
+              title={ANSWER_TITLES[mode]}
+            />
             {latencyMs !== null && (
               <p className="mt-2 text-right text-xs text-zinc-400">
                 {(latencyMs / 1000).toFixed(1)}s end-to-end

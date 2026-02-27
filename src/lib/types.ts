@@ -20,3 +20,5 @@ export interface QueryResponse {
   results: SearchResult[];
   latencyMs: number;
 }
+
+export type AnalysisMode = "explain" | "dependencies" | "documentation" | "business-logic";

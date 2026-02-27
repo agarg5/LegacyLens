@@ -5,9 +5,10 @@ import { useState, useCallback } from "react";
 interface SearchInputProps {
   onSearch: (query: string) => void;
   isLoading: boolean;
+  placeholder?: string;
 }
 
-export default function SearchInput({ onSearch, isLoading }: SearchInputProps) {
+export default function SearchInput({ onSearch, isLoading, placeholder }: SearchInputProps) {
   const [query, setQuery] = useState("");
 
   const handleSubmit = useCallback(
@@ -28,7 +29,7 @@ export default function SearchInput({ onSearch, isLoading }: SearchInputProps) {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask about the GnuCOBOL codebase..."
+          placeholder={placeholder ?? "Ask about the GnuCOBOL codebase..."}
           className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 pr-24 text-zinc-900 placeholder-zinc-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder-zinc-500"
           disabled={isLoading}
         />
