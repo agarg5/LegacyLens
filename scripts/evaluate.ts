@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { searchChunks } from "../src/lib/retrieval";
 import { openai, CHAT_MODEL } from "../src/lib/openai";
+import type { SearchResult } from "../src/lib/types";
 
 dotenv.config({ path: ".env.local" });
 
@@ -209,7 +210,7 @@ function percentile(sorted: number[], p: number): number {
 
 async function generateWithMode(
   query: string,
-  chunks: { chunk: { filePath: string; startLine: number; endLine: number; chunkType: string; name: string; content: string }; score: number }[],
+  chunks: SearchResult[],
   mode: EvalMode,
 ): Promise<string> {
   const context = chunks
