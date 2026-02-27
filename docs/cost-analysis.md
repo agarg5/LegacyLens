@@ -130,22 +130,25 @@ Running the eval suite 10 times during development: ~$0.09.
 
 ---
 
-## 5. Scaling Projections
+## 5. Production Cost Projections
 
-| Daily Queries | Monthly Queries | Monthly API Cost | Annualized |
-|--------------|----------------|-----------------|------------|
-| 10 | 300 | $0.18 | $2.16 |
-| 100 | 3,000 | $1.80 | $21.60 |
-| 1,000 | 30,000 | $18.00 | $216.00 |
-| 10,000 | 300,000 | $180.00 | $2,160.00 |
+Estimated monthly costs at different user scales, assuming ~5 queries per user per day:
 
-**Assumptions**: Average cost of $0.0006 per query, uniform mode distribution. Pinecone free tier supports all volume levels above (read-heavy workload with no write overhead after initial ingestion).
+| | 100 Users | 1,000 Users | 10,000 Users | 100,000 Users |
+|---|-----------|-------------|--------------|---------------|
+| Queries/month | 15,000 | 150,000 | 1,500,000 | 15,000,000 |
+| API cost/month | $9.00 | $90.00 | $900.00 | $9,000.00 |
+| Pinecone | $0 (free) | $0 (free) | $0 (free) | ~$70 (paid) |
+| Vercel | $0 (free) | $0 (free) | $20 (Pro) | $20+ (Pro) |
+| **Total/month** | **$9** | **$90** | **$920** | **~$9,090** |
+
+**Assumptions**: 5 queries/user/day, average cost of $0.0006 per query, uniform mode distribution. Embedding costs for new code additions are negligible (~$0.016 per full re-ingestion). Vector DB storage at current scale is ~12MB of 2GB free tier.
 
 ### Tier Thresholds
 
-- **Free tier viable**: Up to ~1,000 queries/day ($18/month in API costs, all infra free)
-- **Paid Pinecone needed**: Only if indexing multiple codebases or exceeding 2GB storage
-- **Paid Vercel needed**: At ~10,000+ queries/day (serverless function invocation limits)
+- **Free tier viable**: Up to ~1,000 users ($90/month in API costs, all infra free)
+- **Paid Pinecone needed**: Only at 100K+ users or when indexing multiple codebases (exceeding 2GB storage)
+- **Paid Vercel needed**: At ~10,000+ users (serverless function invocation limits on hobby tier)
 
 ---
 
