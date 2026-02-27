@@ -15,6 +15,7 @@ LegacyLens lets developers query legacy COBOL code using plain English. It inges
   - **Dependency Mapping** -- CALL/PERFORM graphs, data item flow, copybook and file dependencies
   - **Documentation Generation** -- Structured docs covering inputs, outputs, processing flow, and error handling
   - **Business Logic Extraction** -- Conditions, calculations, validations, and decision tables in business language
+- **LLM Re-Ranking** -- Over-fetches 2x candidates from Pinecone, then uses GPT-4o-mini to score relevance and return the best results
 - **Streaming Responses** -- Server-sent events for real-time answer generation
 - **Source Citations** -- Every answer references specific files and line numbers
 - **File Context Panel** -- Click any source chunk to view surrounding code with syntax highlighting
@@ -164,6 +165,7 @@ LegacyLens/
 │       ├── openai.ts                 # OpenAI client + model constants
 │       ├── pinecone.ts               # Pinecone client + index helper
 │       ├── retrieval.ts              # Embedding + similarity search
+│       ├── rerank.ts                 # LLM-based re-ranking of search results
 │       ├── prompts.ts                # System prompts for each analysis mode
 │       └── cobol-highlight.ts        # COBOL syntax highlighting
 ├── scripts/
