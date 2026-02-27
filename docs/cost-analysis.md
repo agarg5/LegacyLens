@@ -18,7 +18,7 @@ LegacyLens uses OpenAI APIs (text-embedding-3-small for embeddings, GPT-4o-mini 
 
 ### Codebase Profile
 
-- **Target**: GnuCOBOL compiler -- 100,000+ lines of code across 50+ files
+- **Target**: GnuCOBOL compiler -- well over 10,000 lines of code across 50+ files
 - **Chunking strategy**: Syntax-aware (COBOL divisions/sections/paragraphs) with fixed-size fallback
 - **Max chunk size**: 1,500 characters (~375 tokens per chunk)
 - **Estimated chunks**: ~2,000 (structural COBOL chunks + fixed-size chunks for non-COBOL files)
