@@ -2,6 +2,7 @@ import * as dotenv from "dotenv";
 import { resolve } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { searchChunks } from "../src/lib/retrieval";
+import { EMBEDDING_DIMENSIONS } from "../src/lib/openai";
 import { getIndex } from "../src/lib/pinecone";
 import { discoverFiles } from "./lib/discover";
 
@@ -210,7 +211,7 @@ async function validate() {
   for (const file of allFiles) {
     // Search for content from this specific file
     const fileResults = await index.query({
-      vector: new Array(1536).fill(0), // dummy vector
+      vector: new Array(EMBEDDING_DIMENSIONS).fill(0), // dummy vector
       topK: 1,
       includeMetadata: true,
       filter: { filePath: { $eq: file.filePath } },
