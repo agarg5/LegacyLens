@@ -194,7 +194,8 @@ interface EvalResult {
   mode: EvalMode;
   description: string;
   query: string;
-  latencyMs: number;
+  retrievalLatencyMs: number;    // embedding + Pinecone search only
+  totalLatencyMs: number;        // retrieval + LLM generation
   retrievedFiles: string[];
   fileMatch: boolean;
   keywordMatch: boolean;
@@ -212,8 +213,10 @@ interface ModeStats {
   retrievalPrecision: number;    // fraction with relevant retrieval
   responsePrecision: number;     // fraction with relevant response
   overallPassRate: number;
-  avgLatencyMs: number;
-  p95LatencyMs: number;
+  avgRetrievalLatencyMs: number;
+  p95RetrievalLatencyMs: number;
+  avgTotalLatencyMs: number;
+  p95TotalLatencyMs: number;
 }
 
 interface EvalReport {
@@ -222,7 +225,13 @@ interface EvalReport {
   overallPassRate: number;
   overallRetrievalPrecision: number;
   overallResponsePrecision: number;
-  latency: {
+  retrievalLatency: {
+    p50Ms: number;
+    p95Ms: number;
+    maxMs: number;
+    avgMs: number;
+  };
+  totalLatency: {
     p50Ms: number;
     p95Ms: number;
     maxMs: number;
@@ -236,26 +245,32 @@ interface EvalReport {
 
 async function evaluate() {
   console.log(`\n=== LegacyLens Evaluation Suite ===\n`);
-  console.log(`Running ${TEST_CASES.length} test cases across ${new Set(TEST_CASES.map((t) => t.mode)).size} modes...\n`);
+  const totalCount = TEST_CASES.length;
+  const modeCount = new Set(TEST_CASES.map((t) => t.mode)).size;
+  console.log(`Running ${totalCount} test cases across ${modeCount} modes (concurrency=4)...\n`);
 
+  // Run test cases with concurrency to reduce wall time
+  const CONCURRENCY = 4;
   const results: EvalResult[] = [];
+  let completed = 0;
 
-  for (const tc of TEST_CASES) {
+  async function runTestCase(tc: EvalTestCase): Promise<EvalResult> {
     const modeConfig = tc.mode !== "general" ? MODE_CONFIGS[tc.mode] : null;
     const topK = modeConfig?.defaultTopK ?? 5;
 
-    // Build the search query (with optional prefix for analysis modes)
     const searchQuery = modeConfig?.queryPrefix
       ? `${modeConfig.queryPrefix} ${tc.query}`
       : tc.query;
 
-    // 1. Retrieval
-    const start = Date.now();
+    // 1. Retrieval (timed separately)
+    const retrievalStart = Date.now();
     const searchResults = await searchChunks(searchQuery, topK);
+    const retrievalLatencyMs = Date.now() - retrievalStart;
 
     // 2. Generation
+    const genStart = Date.now();
     const answer = await generateWithMode(tc.query, searchResults, tc.mode);
-    const latencyMs = Date.now() - start;
+    const totalLatencyMs = retrievalLatencyMs + (Date.now() - genStart);
 
     // 3. Score retrieval
     const retrievedFiles = searchResults.map((r) => r.chunk.filePath);
@@ -281,11 +296,12 @@ async function evaluate() {
 
     const overallPass = retrievalRelevant && responseRelevant;
 
-    results.push({
+    return {
       mode: tc.mode,
       description: tc.description,
       query: tc.query,
-      latencyMs,
+      retrievalLatencyMs,
+      totalLatencyMs,
       retrievedFiles,
       fileMatch,
       keywordMatch,
@@ -295,27 +311,47 @@ async function evaluate() {
       retrievalRelevant,
       responseRelevant,
       overallPass,
-    });
+    };
+  }
 
-    const icon = overallPass ? "✓" : "✗";
-    const modeTag = `[${tc.mode}]`.padEnd(17);
-    console.log(`  ${icon} ${modeTag} [${latencyMs}ms] ${tc.description}`);
-    if (!overallPass) {
-      console.log(`    retrieval=${retrievalRelevant} response=${responseRelevant} (${checksPassedCount}/${tc.responseChecks.length} checks)`);
-      if (!retrievalRelevant) {
-        console.log(`    files: ${retrievedFiles.join(", ")}`);
+  // Process in batches of CONCURRENCY
+  for (let i = 0; i < TEST_CASES.length; i += CONCURRENCY) {
+    const batch = TEST_CASES.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(runTestCase));
+
+    for (const result of batchResults) {
+      results.push(result);
+      completed++;
+      const pct = Math.round((completed / totalCount) * 100);
+      const bar = "█".repeat(Math.round(pct / 5)) + "░".repeat(20 - Math.round(pct / 5));
+      const icon = result.overallPass ? "✓" : "✗";
+      const modeTag = `[${result.mode}]`.padEnd(17);
+      process.stdout.write(`\r  [${bar}] ${pct}% (${completed}/${totalCount})\n`);
+      console.log(`  ${icon} ${modeTag} [retrieval=${result.retrievalLatencyMs}ms total=${result.totalLatencyMs}ms] ${result.description}`);
+      if (!result.overallPass) {
+        console.log(`    retrieval=${result.retrievalRelevant} response=${result.responseRelevant} (${result.responseChecksPassed}/${result.responseChecksTotal} checks)`);
+        if (!result.retrievalRelevant) {
+          console.log(`    files: ${result.retrievedFiles.join(", ")}`);
+        }
       }
     }
   }
 
   // ─── Compute stats ──────────────────────────────────────────────────
 
-  // Overall latency
-  const latencies = results.map((r) => r.latencyMs).sort((a, b) => a - b);
-  const p50 = percentile(latencies, 50);
-  const p95 = percentile(latencies, 95);
-  const max = latencies[latencies.length - 1];
-  const avg = Math.round(latencies.reduce((s, v) => s + v, 0) / latencies.length);
+  // Retrieval latency (for assignment target)
+  const retrievalLatencies = results.map((r) => r.retrievalLatencyMs).sort((a, b) => a - b);
+  const retP50 = percentile(retrievalLatencies, 50);
+  const retP95 = percentile(retrievalLatencies, 95);
+  const retMax = retrievalLatencies[retrievalLatencies.length - 1];
+  const retAvg = Math.round(retrievalLatencies.reduce((s, v) => s + v, 0) / retrievalLatencies.length);
+
+  // Total latency (informational — includes LLM generation)
+  const totalLatencies = results.map((r) => r.totalLatencyMs).sort((a, b) => a - b);
+  const totP50 = percentile(totalLatencies, 50);
+  const totP95 = percentile(totalLatencies, 95);
+  const totMax = totalLatencies[totalLatencies.length - 1];
+  const totAvg = Math.round(totalLatencies.reduce((s, v) => s + v, 0) / totalLatencies.length);
 
   // Per-mode stats
   const modes: EvalMode[] = ["general", "explain", "dependencies", "documentation", "business-logic"];
@@ -323,15 +359,18 @@ async function evaluate() {
     .map((mode) => {
       const modeResults = results.filter((r) => r.mode === mode);
       if (modeResults.length === 0) return null;
-      const modeLatencies = modeResults.map((r) => r.latencyMs).sort((a, b) => a - b);
+      const modeRetLatencies = modeResults.map((r) => r.retrievalLatencyMs).sort((a, b) => a - b);
+      const modeTotLatencies = modeResults.map((r) => r.totalLatencyMs).sort((a, b) => a - b);
       return {
         mode,
         testCases: modeResults.length,
         retrievalPrecision: modeResults.filter((r) => r.retrievalRelevant).length / modeResults.length,
         responsePrecision: modeResults.filter((r) => r.responseRelevant).length / modeResults.length,
         overallPassRate: modeResults.filter((r) => r.overallPass).length / modeResults.length,
-        avgLatencyMs: Math.round(modeLatencies.reduce((s, v) => s + v, 0) / modeLatencies.length),
-        p95LatencyMs: percentile(modeLatencies, 95),
+        avgRetrievalLatencyMs: Math.round(modeRetLatencies.reduce((s, v) => s + v, 0) / modeRetLatencies.length),
+        p95RetrievalLatencyMs: percentile(modeRetLatencies, 95),
+        avgTotalLatencyMs: Math.round(modeTotLatencies.reduce((s, v) => s + v, 0) / modeTotLatencies.length),
+        p95TotalLatencyMs: percentile(modeTotLatencies, 95),
       };
     })
     .filter((s): s is ModeStats => s !== null);
@@ -348,7 +387,8 @@ async function evaluate() {
     overallPassRate: Math.round(overallPassRate * 100) / 100,
     overallRetrievalPrecision: Math.round(overallRetrieval * 100) / 100,
     overallResponsePrecision: Math.round(overallResponse * 100) / 100,
-    latency: { p50Ms: p50, p95Ms: p95, maxMs: max, avgMs: avg },
+    retrievalLatency: { p50Ms: retP50, p95Ms: retP95, maxMs: retMax, avgMs: retAvg },
+    totalLatency: { p50Ms: totP50, p95Ms: totP95, maxMs: totMax, avgMs: totAvg },
     modeStats,
     details: results,
   };
@@ -367,24 +407,31 @@ async function evaluate() {
   console.log(`  Retrieval precision:     ${(overallRetrieval * 100).toFixed(0)}%`);
   console.log(`  Response precision:      ${(overallResponse * 100).toFixed(0)}%`);
   console.log(line);
-  console.log("  LATENCY");
-  console.log(`  p50:                     ${p50}ms`);
-  console.log(`  p95:                     ${p95}ms`);
-  console.log(`  max:                     ${max}ms`);
-  console.log(`  avg:                     ${avg}ms`);
+  console.log("  RETRIEVAL LATENCY (embedding + search)");
+  console.log(`  p50:                     ${retP50}ms`);
+  console.log(`  p95:                     ${retP95}ms`);
+  console.log(`  max:                     ${retMax}ms`);
+  console.log(`  avg:                     ${retAvg}ms`);
+  console.log(line);
+  console.log("  TOTAL LATENCY (retrieval + LLM generation)");
+  console.log(`  p50:                     ${totP50}ms`);
+  console.log(`  p95:                     ${totP95}ms`);
+  console.log(`  max:                     ${totMax}ms`);
+  console.log(`  avg:                     ${totAvg}ms`);
   console.log(line);
   console.log("  PER-MODE BREAKDOWN");
   for (const ms of modeStats) {
-    console.log(`  ${ms.mode.padEnd(18)} pass=${(ms.overallPassRate * 100).toFixed(0)}%  retrieval=${(ms.retrievalPrecision * 100).toFixed(0)}%  response=${(ms.responsePrecision * 100).toFixed(0)}%  p95=${ms.p95LatencyMs}ms  (n=${ms.testCases})`);
+    console.log(`  ${ms.mode.padEnd(18)} pass=${(ms.overallPassRate * 100).toFixed(0)}%  ret=${(ms.retrievalPrecision * 100).toFixed(0)}%  resp=${(ms.responsePrecision * 100).toFixed(0)}%  retP95=${ms.p95RetrievalLatencyMs}ms  totP95=${ms.p95TotalLatencyMs}ms  (n=${ms.testCases})`);
   }
   console.log(line);
   console.log("  TARGETS");
-  const latencyPass = p95 <= 3000;
+  const latencyPass = retP95 <= 3000;
   const retrievalPass = overallRetrieval >= 0.7;
   const passRatePass = overallPassRate >= 0.6;
-  console.log(`  ${latencyPass ? "✓" : "✗"} queryLatencyP95: ${p95}ms (target: ≤3000ms)`);
+  console.log(`  ${latencyPass ? "✓" : "✗"} retrievalLatencyP95: ${retP95}ms (target: ≤3000ms)`);
   console.log(`  ${retrievalPass ? "✓" : "✗"} retrievalPrecision: ${(overallRetrieval * 100).toFixed(0)}% (target: ≥70%)`);
   console.log(`  ${passRatePass ? "✓" : "✗"} overallPassRate: ${(overallPassRate * 100).toFixed(0)}% (target: ≥60%)`);
+  console.log(`  ℹ totalLatencyP95: ${totP95}ms (informational — includes LLM generation)`);
   console.log(dblLine);
 
   // ─── Write JSON report ──────────────────────────────────────────────
@@ -393,7 +440,119 @@ async function evaluate() {
   await mkdir(reportsDir, { recursive: true });
   const reportPath = resolve(reportsDir, "evaluation.json");
   await writeFile(reportPath, JSON.stringify(report, null, 2));
-  console.log(`\nReport saved to ${reportPath}\n`);
+  // ─── Generate HTML report ─────────────────────────────────────────
+
+  const htmlPath = resolve(reportsDir, "evaluation.html");
+  const passColor = "#22c55e";
+  const failColor = "#ef4444";
+  const infoColor = "#3b82f6";
+
+  const detailRows = results
+    .map((r) => {
+      const statusColor = r.overallPass ? passColor : failColor;
+      const statusText = r.overallPass ? "PASS" : "FAIL";
+      return `<tr>
+        <td><span style="color:${statusColor};font-weight:bold">${statusText}</span></td>
+        <td>${r.mode}</td>
+        <td>${r.description}</td>
+        <td>${r.retrievalLatencyMs}ms</td>
+        <td>${r.totalLatencyMs}ms</td>
+        <td>${r.retrievalRelevant ? "✓" : "✗"}</td>
+        <td>${r.responseChecksPassed}/${r.responseChecksTotal}</td>
+        <td>${r.topScore.toFixed(3)}</td>
+      </tr>`;
+    })
+    .join("\n");
+
+  const modeRows = modeStats
+    .map((ms) => `<tr>
+      <td style="font-weight:bold">${ms.mode}</td>
+      <td>${ms.testCases}</td>
+      <td>${(ms.overallPassRate * 100).toFixed(0)}%</td>
+      <td>${(ms.retrievalPrecision * 100).toFixed(0)}%</td>
+      <td>${(ms.responsePrecision * 100).toFixed(0)}%</td>
+      <td>${ms.p95RetrievalLatencyMs}ms</td>
+      <td>${ms.p95TotalLatencyMs}ms</td>
+    </tr>`)
+    .join("\n");
+
+  const targetRows = [
+    { name: "Retrieval Latency P95", pass: latencyPass, actual: `${retP95}ms`, target: "≤3000ms" },
+    { name: "Retrieval Precision", pass: retrievalPass, actual: `${(overallRetrieval * 100).toFixed(0)}%`, target: "≥70%" },
+    { name: "Overall Pass Rate", pass: passRatePass, actual: `${(overallPassRate * 100).toFixed(0)}%`, target: "≥60%" },
+  ]
+    .map((t) => `<tr>
+      <td><span style="color:${t.pass ? passColor : failColor};font-weight:bold">${t.pass ? "PASS" : "FAIL"}</span></td>
+      <td>${t.name}</td>
+      <td>${t.actual}</td>
+      <td>${t.target}</td>
+    </tr>`)
+    .join("\n");
+
+  const allTargetsPassed = latencyPass && retrievalPass && passRatePass;
+  const overallBadge = allTargetsPassed
+    ? `<span style="background:${passColor};color:white;padding:4px 12px;border-radius:4px;font-weight:bold">ALL TARGETS PASSING</span>`
+    : `<span style="background:${failColor};color:white;padding:4px 12px;border-radius:4px;font-weight:bold">SOME TARGETS FAILING</span>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegacyLens Evaluation Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1100px; margin: 0 auto; padding: 20px; background: #f9fafb; color: #111827; }
+    h1 { border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
+    h2 { margin-top: 32px; color: #374151; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    th { background: #1f2937; color: white; text-align: left; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 8px 14px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 16px 0; }
+    .stat-card { background: white; padding: 16px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-value { font-size: 28px; font-weight: bold; color: #1f2937; }
+    .stat-label { font-size: 13px; color: #6b7280; margin-top: 4px; }
+    .timestamp { color: #9ca3af; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>LegacyLens Evaluation Report</h1>
+  <p class="timestamp">Generated: ${report.timestamp}</p>
+  <p>${overallBadge}</p>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-value">${results.length}</div><div class="stat-label">Test Cases</div></div>
+    <div class="stat-card"><div class="stat-value">${(overallPassRate * 100).toFixed(0)}%</div><div class="stat-label">Pass Rate</div></div>
+    <div class="stat-card"><div class="stat-value">${(overallRetrieval * 100).toFixed(0)}%</div><div class="stat-label">Retrieval Precision</div></div>
+    <div class="stat-card"><div class="stat-value">${retP95}ms</div><div class="stat-label">Retrieval P95</div></div>
+    <div class="stat-card"><div class="stat-value">${totP95}ms</div><div class="stat-label">Total P95 (incl. LLM)</div></div>
+  </div>
+
+  <h2>Targets</h2>
+  <table>
+    <tr><th>Status</th><th>Metric</th><th>Actual</th><th>Target</th></tr>
+    ${targetRows}
+    <tr><td><span style="color:${infoColor};font-weight:bold">INFO</span></td><td>Total Latency P95</td><td>${totP95}ms</td><td>Informational</td></tr>
+  </table>
+
+  <h2>Per-Mode Breakdown</h2>
+  <table>
+    <tr><th>Mode</th><th>Cases</th><th>Pass Rate</th><th>Retrieval</th><th>Response</th><th>Ret P95</th><th>Total P95</th></tr>
+    ${modeRows}
+  </table>
+
+  <h2>Test Case Details</h2>
+  <table>
+    <tr><th>Status</th><th>Mode</th><th>Description</th><th>Retrieval</th><th>Total</th><th>File Match</th><th>Resp Checks</th><th>Top Score</th></tr>
+    ${detailRows}
+  </table>
+</body>
+</html>`;
+
+  await writeFile(htmlPath, html);
+  console.log(`\nReports saved to:`);
+  console.log(`  JSON: ${reportPath}`);
+  console.log(`  HTML: ${htmlPath}\n`);
 
   // Exit with error if targets not met
   const allPassed = latencyPass && retrievalPass && passRatePass;
