@@ -3,62 +3,14 @@ import { resolve } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { searchChunks } from "../src/lib/retrieval";
 import { openai, CHAT_MODEL } from "../src/lib/openai";
-import type { SearchResult } from "../src/lib/types";
+import type { SearchResult, AnalysisMode } from "../src/lib/types";
+import { MODE_CONFIGS } from "../src/lib/prompts";
 
 dotenv.config({ path: ".env.local" });
 
-// ─── Analysis mode types (mirrors src/lib/types.ts once merged) ──────────
+// ─── Mode types ──────────────────────────────────────────────────────────
 
-type AnalysisMode = "explain" | "dependencies" | "documentation" | "business-logic";
 type EvalMode = "general" | AnalysisMode;
-
-interface ModeConfig {
-  systemPrompt: string;
-  defaultTopK: number;
-  queryPrefix?: string;
-}
-
-// Inline mode configs so the eval suite works before the analyze feature merges.
-// These mirror what src/lib/prompts.ts will export.
-const MODE_CONFIGS: Record<AnalysisMode, ModeConfig> = {
-  explain: {
-    defaultTopK: 5,
-    systemPrompt: `You are a legacy code expert. Provide a detailed, step-by-step explanation of the retrieved COBOL code.
-Break down what each section does, explain control flow, data movement, and any side effects.
-Always cite file paths and line numbers. If the code is incomplete, note what's missing.`,
-  },
-  dependencies: {
-    defaultTopK: 10,
-    queryPrefix: "CALL PERFORM COPY dependencies of",
-    systemPrompt: `You are a legacy code expert. Analyze the retrieved code and map all dependencies:
-- CALL statements (external program calls)
-- PERFORM statements (internal paragraph/section calls)
-- COPY/COPYBOOK references
-- Data dependencies (shared data items, file descriptors)
-Present the results as a structured dependency map. Always cite file paths and line numbers.`,
-  },
-  documentation: {
-    defaultTopK: 8,
-    queryPrefix: "documentation overview of",
-    systemPrompt: `You are a legacy code expert. Generate structured documentation for the retrieved code:
-- Purpose and overview
-- Input/output parameters and data items
-- Business logic summary
-- Key operations and control flow
-- Dependencies and external references
-Use clear headings and always cite file paths and line numbers.`,
-  },
-  "business-logic": {
-    defaultTopK: 8,
-    queryPrefix: "business rules conditions calculations in",
-    systemPrompt: `You are a legacy code expert. Extract and explain business rules from the retrieved code:
-- Conditional logic (IF/EVALUATE/WHEN)
-- Calculations and formulas (COMPUTE, ADD, SUBTRACT, etc.)
-- Validation rules and constraints
-- Data transformation rules
-Present each rule clearly with its purpose. Always cite file paths and line numbers.`,
-  },
-};
 
 const GENERAL_SYSTEM_PROMPT = `You are a legacy code expert helping developers understand a GnuCOBOL codebase.
 Answer the user's question using ONLY the provided code snippets.
