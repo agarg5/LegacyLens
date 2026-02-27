@@ -2,15 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchChunks } from "@/lib/retrieval";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const query = body.query;
+  try {
+    const body = await req.json();
+    const query = body.query;
 
-  if (!query || typeof query !== "string") {
-    return NextResponse.json({ error: "Missing 'query' string in body" }, { status: 400 });
+    if (!query || typeof query !== "string") {
+      return NextResponse.json({ error: "Missing 'query' string in body" }, { status: 400 });
+    }
+
+    const topK = typeof body.topK === "number" ? body.topK : undefined;
+
+    const results = await searchChunks(query, topK);
+    return NextResponse.json({ results });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const topK = typeof body.topK === "number" ? body.topK : undefined;
-
-  const results = await searchChunks(query, topK);
-  return NextResponse.json({ results });
 }
