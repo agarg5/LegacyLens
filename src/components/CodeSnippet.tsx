@@ -29,19 +29,21 @@ function highlightCobol(code: string): string {
   return code
     .split("\n")
     .map((line) => {
-      // Comment lines (column 7 = *)
+      // Comment lines (column 7 = *) — detect on raw line before escaping
       if (/^.{6}\*/.test(line) || line.trimStart().startsWith("*>")) {
         return `<span class="hljs-comment">${escapeHtml(line)}</span>`;
       }
 
-      // Highlight tokens
-      return line.replace(/([A-Z][A-Z0-9-]*)|("(?:[^"\\]|\\.)*")|('(?:[^'\\]|\\.)*')|(\d+(?:\.\d+)?)/gi, (match, word, dblStr, sglStr, num) => {
-        if (dblStr || sglStr) return `<span class="hljs-string">${escapeHtml(match)}</span>`;
-        if (num) return `<span class="hljs-number">${escapeHtml(match)}</span>`;
+      // Escape the full line first to prevent XSS via dangerouslySetInnerHTML,
+      // then apply keyword/string/number highlighting on the safe output.
+      const escaped = escapeHtml(line);
+      return escaped.replace(/([A-Z][A-Z0-9-]*)|(&quot;(?:[^&]|&(?!quot;))*&quot;)|(&apos;(?:[^&]|&(?!apos;))*&apos;)|('(?:[^'\\]|\\.)*')|("(?:[^"\\]|\\.)*")|(\d+(?:\.\d+)?)/gi, (match, word, _dblEsc, _sglEsc, sglStr, dblStr, num) => {
+        if (_dblEsc || _sglEsc || dblStr || sglStr) return `<span class="hljs-string">${match}</span>`;
+        if (num) return `<span class="hljs-number">${match}</span>`;
         if (word && COBOL_KEYWORDS.has(word.toUpperCase())) {
-          return `<span class="hljs-keyword">${escapeHtml(match)}</span>`;
+          return `<span class="hljs-keyword">${match}</span>`;
         }
-        return escapeHtml(match);
+        return match;
       });
     })
     .join("\n");
