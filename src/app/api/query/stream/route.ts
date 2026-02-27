@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { openai, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL } from "@/lib/openai";
 import { getIndex } from "@/lib/pinecone";
+import { rerankResults } from "@/lib/rerank";
 import type { CodeChunk, SearchResult } from "@/lib/types";
 
 const TOP_K = 5;
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     const topK = typeof body.topK === "number" ? body.topK : TOP_K;
 
-    // Step 1: Search (non-streamed)
+    // Step 1: Search (non-streamed) — over-fetch 2x for re-ranking
     const embRes = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       dimensions: EMBEDDING_DIMENSIONS,
@@ -28,11 +29,11 @@ export async function POST(req: NextRequest) {
     const index = getIndex();
     const pineconeResults = await index.query({
       vector: queryVector,
-      topK,
+      topK: topK * 2,
       includeMetadata: true,
     });
 
-    const results: SearchResult[] = (pineconeResults.matches ?? []).map((m) => {
+    const candidates: SearchResult[] = (pineconeResults.matches ?? []).map((m) => {
       const meta = m.metadata as Record<string, unknown>;
       return {
         chunk: {
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest) {
         score: m.score ?? 0,
       };
     });
+
+    const results = await rerankResults(query, candidates, topK);
 
     // Step 2: Build context for LLM
     const context = results

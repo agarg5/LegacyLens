@@ -11,7 +11,7 @@ interface CodeSnippetProps {
 }
 
 export default function CodeSnippet({ result, index, onClick }: CodeSnippetProps) {
-  const { chunk, score } = result;
+  const { chunk, score, rerankScore } = result;
 
   const highlighted = useMemo(() => highlightCobol(chunk.content), [chunk.content]);
 
@@ -49,6 +49,11 @@ export default function CodeSnippet({ result, index, onClick }: CodeSnippetProps
           >
             {scorePercent}%
           </span>
+          {rerankScore != null && (
+            <span className="rounded bg-purple-100 px-1.5 py-0.5 font-mono font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+              {rerankScore}/10
+            </span>
+          )}
           {onClick && (
             <span className="hidden text-blue-500 sm:inline dark:text-blue-400">
               View file &rarr;
