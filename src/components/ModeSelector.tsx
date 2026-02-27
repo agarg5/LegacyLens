@@ -24,7 +24,7 @@ export default function ModeSelector({ mode, onModeChange }: ModeSelectorProps) 
         <button
           key={m.value}
           onClick={() => onModeChange(m.value)}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:text-sm ${
             mode === m.value
               ? "bg-blue-600 text-white"
               : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"

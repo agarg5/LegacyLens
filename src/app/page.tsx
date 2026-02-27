@@ -5,6 +5,7 @@ import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
 import ModeSelector from "@/components/ModeSelector";
+import FileContextPanel from "@/components/FileContextPanel";
 import type { Mode } from "@/components/ModeSelector";
 import type { SearchResult } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export default function Home() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
 
   const handleSearch = useCallback(async (query: string) => {
     setIsLoading(true);
@@ -40,6 +42,7 @@ export default function Home() {
     setAnswer("");
     setLatencyMs(null);
     setError(null);
+    setSelectedResult(null);
 
     const start = Date.now();
 
@@ -98,10 +101,10 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      <div className="mx-auto max-w-4xl px-4 py-12">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-12">
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl dark:text-zinc-50">
             LegacyLens
           </h1>
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">
@@ -154,12 +157,26 @@ export default function Home() {
             </h2>
             <div className="space-y-4">
               {results.map((r, i) => (
-                <CodeSnippet key={r.chunk.id} result={r} index={i} />
+                <CodeSnippet
+                  key={r.chunk.id}
+                  result={r}
+                  index={i}
+                  onClick={setSelectedResult}
+                />
               ))}
             </div>
           </div>
         )}
       </div>
+
+      {/* File Context Slide-Over */}
+      {selectedResult && (
+        <FileContextPanel
+          filePath={selectedResult.chunk.filePath}
+          highlightChunkId={selectedResult.chunk.id}
+          onClose={() => setSelectedResult(null)}
+        />
+      )}
     </div>
   );
 }
