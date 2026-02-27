@@ -13,6 +13,7 @@ export interface CodeChunk {
 export interface SearchResult {
   chunk: CodeChunk;
   score: number;
+  rerankScore?: number;
 }
 
 export interface QueryResponse {

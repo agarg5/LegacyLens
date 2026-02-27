@@ -1,5 +1,6 @@
 import { openai, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL } from "./openai";
 import { getIndex } from "./pinecone";
+import { rerankResults } from "./rerank";
 import type { CodeChunk, SearchResult, QueryResponse } from "./types";
 
 const TOP_K = 5;
@@ -17,13 +18,15 @@ export async function searchChunks(query: string, topK = TOP_K): Promise<SearchR
   const queryVector = embRes.data[0].embedding;
   const index = getIndex();
 
+  // Over-fetch 2x candidates for re-ranking
+  const fetchK = topK * 2;
   const results = await index.query({
     vector: queryVector,
-    topK,
+    topK: fetchK,
     includeMetadata: true,
   });
 
-  return (results.matches ?? []).map((m) => {
+  const candidates: SearchResult[] = (results.matches ?? []).map((m) => {
     const meta = m.metadata as Record<string, unknown>;
     return {
       chunk: {
@@ -40,6 +43,8 @@ export async function searchChunks(query: string, topK = TOP_K): Promise<SearchR
       score: m.score ?? 0,
     };
   });
+
+  return rerankResults(query, candidates, topK);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { openai, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL } from "@/lib/openai";
 import { getIndex } from "@/lib/pinecone";
+import { rerankResults } from "@/lib/rerank";
 import type { CodeChunk, SearchResult, AnalysisMode } from "@/lib/types";
 import { MODE_CONFIGS } from "@/lib/prompts";
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Augment query for better retrieval if mode has a queryPrefix
     const searchQuery = config.queryPrefix ? config.queryPrefix + query : query;
 
-    // Step 1: Search
+    // Step 1: Search — over-fetch 2x for re-ranking
     const embRes = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       dimensions: EMBEDDING_DIMENSIONS,
@@ -41,11 +42,11 @@ export async function POST(req: NextRequest) {
     const index = getIndex();
     const pineconeResults = await index.query({
       vector: queryVector,
-      topK,
+      topK: topK * 2,
       includeMetadata: true,
     });
 
-    const results: SearchResult[] = (pineconeResults.matches ?? []).map((m) => {
+    const candidates: SearchResult[] = (pineconeResults.matches ?? []).map((m) => {
       const meta = m.metadata as Record<string, unknown>;
       return {
         chunk: {
@@ -62,6 +63,9 @@ export async function POST(req: NextRequest) {
         score: m.score ?? 0,
       };
     });
+
+    // Re-rank using raw query (not searchQuery with mode prefix)
+    const results = await rerankResults(query, candidates, topK);
 
     // Step 2: Build context for LLM
     const context = results
