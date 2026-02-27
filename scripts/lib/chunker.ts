@@ -8,7 +8,6 @@ const OVERLAP_LINES = 3;
 const DIVISION_RE = /^\s*(IDENTIFICATION|ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION/i;
 const SECTION_RE = /^\s*([\w-]+)\s+SECTION\s*\.?\s*$/i;
 const PARAGRAPH_RE = /^\s*([\w-]+)\s*\.\s*$/;
-const COPY_RE = /^\s*COPY\s+['"]?([\w.-]+)['"]?\s*\.?\s*$/i;
 const PROGRAM_ID_RE = /^\s*PROGRAM-ID\.\s*([\w-]+)/i;
 
 interface LineInfo {
@@ -121,15 +120,12 @@ function splitCobolStructurally(lines: LineInfo[]): RawChunk[] {
   return chunks;
 }
 
-function fixedSizeChunks(
-  lines: LineInfo[],
-  filePath: string,
-  chunkType: CodeChunk["chunkType"] = "fixed"
-): LineInfo[][] {
+function fixedSizeChunks(lines: LineInfo[]): LineInfo[][] {
   const result: LineInfo[][] = [];
   let i = 0;
 
   while (i < lines.length) {
+    const chunkStartIdx = i;
     const chunk: LineInfo[] = [];
     let charCount = 0;
 
@@ -141,9 +137,9 @@ function fixedSizeChunks(
 
     result.push(chunk);
 
-    // Add overlap
+    // Add overlap — back up by OVERLAP_LINES but not before one past the chunk start
     if (i < lines.length) {
-      i = Math.max(i - OVERLAP_LINES, chunk[0].lineNumber);
+      i = Math.max(i - OVERLAP_LINES, chunkStartIdx + 1);
     }
   }
 
@@ -182,7 +178,7 @@ function chunkCobol(
 
     // If chunk is too large, split further with fixed-size
     if (content.length > MAX_CHUNK_SIZE * 2) {
-      const subChunks = fixedSizeChunks(raw.lines, file.filePath);
+      const subChunks = fixedSizeChunks(raw.lines);
       for (let i = 0; i < subChunks.length; i++) {
         const sub = subChunks[i];
         results.push({
@@ -219,7 +215,7 @@ function chunkFixedSize(
   lines: LineInfo[],
   file: DiscoveredFile
 ): CodeChunk[] {
-  const subChunks = fixedSizeChunks(lines, file.filePath);
+  const subChunks = fixedSizeChunks(lines);
   return subChunks.map((sub, i) => ({
     id: makeId(file.filePath, sub[0].lineNumber),
     content: sub.map((l) => l.text).join("\n"),
