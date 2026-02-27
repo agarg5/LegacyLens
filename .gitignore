@@ -1,0 +1,40 @@
+# Assignment PDF
+assignment.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Worktrees
+.worktrees/
+
+# Next.js
+.next/
+out/
+
+# Build
+dist/
+build/
+
+# Target codebase (cloned externally)
+target-codebase/
+
+# Debug
+npm-debug.log*
+
+# Vercel
+.vercel

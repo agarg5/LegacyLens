@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegacyLens — Pre-Search Checklist</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #fafafa;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.25rem;
+            color: #111;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            font-style: italic;
+        }
+        h2 {
+            font-size: 1.5rem;
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #111;
+        }
+        h3 {
+            font-size: 1.15rem;
+            margin: 1.5rem 0 0.75rem;
+            color: #333;
+        }
+        .question {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .question strong {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #222;
+        }
+        .question ul {
+            margin-left: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .question li {
+            margin-bottom: 0.25rem;
+            color: #555;
+        }
+        .answer {
+            background: #f0f7f0;
+            border-left: 3px solid #2d8a4e;
+            padding: 0.75rem 1rem;
+            border-radius: 0 4px 4px 0;
+            margin-top: 0.5rem;
+        }
+        .answer p {
+            margin-bottom: 0.5rem;
+        }
+        .answer p:last-child {
+            margin-bottom: 0;
+        }
+        .rationale {
+            color: #555;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #111;
+            color: #fff;
+            font-weight: 600;
+        }
+        .tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .tag-selected { background: #d4edda; color: #155724; }
+        .tag-rejected { background: #f8d7da; color: #721c24; }
+        .tag-considered { background: #fff3cd; color: #856404; }
+        .phase-header {
+            background: #111;
+            color: #fff;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            margin: 2.5rem 0 1rem;
+            font-size: 1.25rem;
+        }
+        footer {
+            margin-top: 3rem;
+            padding-top: 1rem;
+            border-top: 1px solid #ddd;
+            color: #888;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<h1>LegacyLens — Pre-Search Checklist</h1>
+<p class="subtitle">Building RAG Systems for Legacy Enterprise Codebases</p>
+
+<!-- ============================================ -->
+<div class="phase-header">Phase 1: Define Your Constraints</div>
+
+<!-- 1. Scale & Load Profile -->
+<h3>1. Scale &amp; Load Profile</h3>
+<div class="question">
+    <strong>How large is your target codebase (LOC, file count)?</strong>
+    <div class="answer">
+        <p><b>GnuCOBOL</b> — approximately 100,000+ lines of COBOL/C source across 200+ files. The COBOL compiler itself plus test programs and utilities. Well above the 10,000 LOC / 50 file minimum.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Expected query volume?</strong>
+    <div class="answer">
+        <p>Low — this is a demo/evaluation project. Expect &lt;100 queries/day during development, potentially a few hundred during the demo period. No need to design for high concurrency.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Batch ingestion or incremental updates?</strong>
+    <div class="answer">
+        <p><b>Batch ingestion only</b> for MVP. The target codebase is a static snapshot — we clone GnuCOBOL once and index it. Incremental updates could be a stretch goal for the final submission but are not required.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Latency requirements for queries?</strong>
+    <div class="answer">
+        <p>Assignment requires <b>&lt;3 seconds end-to-end</b>. This includes embedding the query (~200ms), Pinecone search (~100ms), context assembly (~50ms), and LLM answer generation (~1-2s). Achievable with the chosen stack.</p>
+    </div>
+</div>
+
+<!-- 2. Budget & Cost Ceiling -->
+<h3>2. Budget &amp; Cost Ceiling</h3>
+<div class="question">
+    <strong>Vector database hosting costs?</strong>
+    <div class="answer">
+        <p><b>Pinecone free tier</b> — 1 index, up to ~100K vectors, no cost. GnuCOBOL will produce roughly 2,000-5,000 chunks, well within free tier limits.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Embedding API costs (per token)?</strong>
+    <div class="answer">
+        <p><b>OpenAI text-embedding-3-small</b>: $0.02 per 1M tokens. For ~100K LOC, estimated ~500K tokens total → ~$0.01 for full ingestion. Negligible cost, especially with existing OpenAI credits.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>LLM API costs for answer generation?</strong>
+    <div class="answer">
+        <p><b>GPT-4o-mini</b>: $0.15/1M input tokens, $0.60/1M output tokens. With ~2K tokens per query (context + prompt) and ~500 token response, cost is ~$0.0006/query. Even 1,000 queries = ~$0.60. Existing OpenAI credits cover this.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Where will you trade money for time?</strong>
+    <div class="answer">
+        <p>Everywhere we can. Using managed services (Pinecone, OpenAI APIs, Vercel) over self-hosted alternatives. The one-week timeline makes developer time the scarcest resource — paying for managed infra is the right call.</p>
+    </div>
+</div>
+
+<!-- 3. Time to Ship -->
+<h3>3. Time to Ship</h3>
+<div class="question">
+    <strong>MVP timeline?</strong>
+    <div class="answer">
+        <p><b>24 hours (Tuesday)</b>. MVP must have: ingestion, chunking, embeddings, vector storage, semantic search, query interface, code snippets with references, basic answer generation, and public deployment.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Which features are must-have vs nice-to-have?</strong>
+    <div class="answer">
+        <p><b>Must-have (MVP)</b>: Ingestion pipeline, syntax-aware chunking, Pinecone storage, semantic search, Next.js web UI, LLM answer generation, Vercel deployment.</p>
+        <p><b>Nice-to-have (Early/Final)</b>: Re-ranking, dependency mapping, pattern detection, code explanation, documentation generation, incremental updates, eval suite.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Framework learning curve acceptable?</strong>
+    <div class="answer">
+        <p>Going custom (no LangChain) eliminates framework learning curve. Next.js and Pinecone SDK are straightforward. OpenAI SDK is well-known. Total new surface area is minimal.</p>
+    </div>
+</div>
+
+<!-- 4. Data Sensitivity -->
+<h3>4. Data Sensitivity</h3>
+<div class="question">
+    <strong>Is the codebase open source or proprietary?</strong>
+    <div class="answer">
+        <p><b>Open source</b> — GnuCOBOL is GPL-licensed. No restrictions on sending code to external APIs for embedding or LLM processing.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Can you send code to external APIs?</strong>
+    <div class="answer">
+        <p>Yes — open source code, no data sensitivity concerns. Using OpenAI embeddings and Pinecone cloud storage is fine.</p>
+    </div>
+</div>
+
+<!-- 5. Team & Skill Constraints -->
+<h3>5. Team &amp; Skill Constraints</h3>
+<div class="question">
+    <strong>Familiarity with vector databases?</strong>
+    <div class="answer">
+        <p>Some familiarity with Pinecone. Existing account. API is straightforward — upsert vectors, query with filters.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Experience with RAG frameworks (LangChain, LlamaIndex)?</strong>
+    <div class="answer">
+        <p>Limited — this is why we're going custom. A simple pipeline with direct API calls is more predictable than learning LangChain abstractions under time pressure.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Comfort with the target legacy language?</strong>
+    <div class="answer">
+        <p>Not deeply familiar with COBOL, but the chunking strategy can be based on well-documented COBOL structure (IDENTIFICATION DIVISION, ENVIRONMENT DIVISION, DATA DIVISION, PROCEDURE DIVISION, paragraphs, sections). We'll research COBOL syntax patterns during implementation.</p>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<div class="phase-header">Phase 2: Architecture Discovery</div>
+
+<!-- 6. Vector Database Selection -->
+<h3>6. Vector Database Selection</h3>
+<div class="question">
+    <strong>Comparison of considered options:</strong>
+    <table>
+        <tr><th>Database</th><th>Status</th><th>Rationale</th></tr>
+        <tr>
+            <td>Pinecone</td>
+            <td><span class="tag tag-selected">SELECTED</span></td>
+            <td>Managed cloud, free tier sufficient, simple API, existing account, fast setup. Best fit for one-week sprint with low query volume.</td>
+        </tr>
+        <tr>
+            <td>ChromaDB</td>
+            <td><span class="tag tag-considered">Considered</span></td>
+            <td>Great for local prototyping but harder to deploy publicly. Would need self-hosting.</td>
+        </tr>
+        <tr>
+            <td>Weaviate</td>
+            <td><span class="tag tag-considered">Considered</span></td>
+            <td>Good hybrid search, but more complex setup. Overkill for our scale.</td>
+        </tr>
+        <tr>
+            <td>Qdrant</td>
+            <td><span class="tag tag-considered">Considered</span></td>
+            <td>Excellent filtering, but would require self-hosting or Qdrant Cloud setup.</td>
+        </tr>
+        <tr>
+            <td>pgvector</td>
+            <td><span class="tag tag-rejected">Rejected</span></td>
+            <td>Requires managing a Postgres instance. Adds operational complexity.</td>
+        </tr>
+    </table>
+    <div class="answer">
+        <p><b>Key factors</b>: Managed vs self-hosted? → <b>Managed</b> (Pinecone). Filtering and metadata? → Pinecone supports metadata filtering, sufficient for our needs. Hybrid search needed? → Not for MVP; pure vector search first. Scaling? → Free tier handles our scale easily.</p>
+    </div>
+</div>
+
+<!-- 7. Embedding Strategy -->
+<h3>7. Embedding Strategy</h3>
+<div class="question">
+    <strong>Comparison of considered models:</strong>
+    <table>
+        <tr><th>Model</th><th>Dimensions</th><th>Status</th><th>Rationale</th></tr>
+        <tr>
+            <td>OpenAI text-embedding-3-small</td>
+            <td>1536</td>
+            <td><span class="tag tag-selected">SELECTED</span></td>
+            <td>Good cost/quality balance, existing credits, widely used, reliable API.</td>
+        </tr>
+        <tr>
+            <td>Voyage Code 2</td>
+            <td>1536</td>
+            <td><span class="tag tag-considered">Considered</span></td>
+            <td>Optimized for code, but requires separate API account. Could upgrade to this later if retrieval quality is lacking.</td>
+        </tr>
+        <tr>
+            <td>OpenAI text-embedding-3-large</td>
+            <td>3072</td>
+            <td><span class="tag tag-rejected">Rejected</span></td>
+            <td>Higher dimensions = more storage and slower search. Marginal quality gain not worth it.</td>
+        </tr>
+        <tr>
+            <td>sentence-transformers (local)</td>
+            <td>varies</td>
+            <td><span class="tag tag-rejected">Rejected</span></td>
+            <td>Free but slower, harder to deploy on Vercel serverless. API-based is simpler.</td>
+        </tr>
+    </table>
+    <div class="answer">
+        <p><b>Key factors</b>: Code-specific vs general-purpose? → General-purpose for now; COBOL code has lots of English-like syntax (MOVE, PERFORM, DISPLAY) so general embeddings work well. Batch processing? → Yes, embed chunks in batches of 100-200 for efficiency.</p>
+    </div>
+</div>
+
+<!-- 8. Chunking Approach -->
+<h3>8. Chunking Approach</h3>
+<div class="question">
+    <strong>Syntax-aware vs fixed-size?</strong>
+    <div class="answer">
+        <p><b>Syntax-aware primary, fixed-size fallback.</b> COBOL has natural boundaries:</p>
+        <ul>
+            <li><b>Division-level</b>: IDENTIFICATION, ENVIRONMENT, DATA, PROCEDURE — top-level structure</li>
+            <li><b>Section/Paragraph-level</b>: Within PROCEDURE DIVISION — natural function-like units</li>
+            <li><b>DATA DIVISION entries</b>: Record definitions (01-level groups)</li>
+        </ul>
+        <p>For files that don't parse cleanly, fall back to fixed-size chunks (~500-800 tokens) with ~100 token overlap.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Optimal chunk size for embedding model?</strong>
+    <div class="answer">
+        <p>text-embedding-3-small handles up to 8191 tokens, but quality degrades on very long texts. Target <b>300-800 tokens per chunk</b>. Most COBOL paragraphs fit naturally in this range.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Metadata to preserve?</strong>
+    <div class="answer">
+        <p>Per chunk: <b>file_path</b>, <b>start_line</b>, <b>end_line</b>, <b>chunk_type</b> (division/section/paragraph/data), <b>name</b> (paragraph or section name), <b>parent_section</b>, <b>program_id</b>.</p>
+    </div>
+</div>
+
+<!-- 9. Retrieval Pipeline -->
+<h3>9. Retrieval Pipeline</h3>
+<div class="question">
+    <strong>Top-k value for similarity search?</strong>
+    <div class="answer">
+        <p>Start with <b>top-k = 10</b>, return top 5 to the user. The extra results give headroom for re-ranking or filtering.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Re-ranking approach?</strong>
+    <div class="answer">
+        <p><b>Not for MVP.</b> Raw cosine similarity from Pinecone is the baseline. For early/final submission, could add a lightweight re-ranker (e.g., cross-encoder or LLM-based relevance scoring).</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Context window management?</strong>
+    <div class="answer">
+        <p>Assemble top-5 chunks into a prompt. Each chunk includes its metadata (file, lines). Total context stays under ~4K tokens to leave room for the answer. If chunks are too large, truncate to fit.</p>
+    </div>
+</div>
+
+<!-- 10. Answer Generation -->
+<h3>10. Answer Generation</h3>
+<div class="question">
+    <strong>Which LLM for synthesis?</strong>
+    <div class="answer">
+        <p><b>GPT-4o-mini</b> for MVP (fast, cheap). Option to upgrade to <b>GPT-4o</b> for higher quality if needed. Existing OpenAI credits cover both.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Prompt template design?</strong>
+    <div class="answer">
+        <p>System prompt establishes the role as a COBOL codebase expert. User prompt includes the query and retrieved chunks with metadata. Instruct the LLM to cite specific files and line numbers in its response. Include instructions to say "I don't have enough context" when retrieval results aren't relevant.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Streaming vs batch response?</strong>
+    <div class="answer">
+        <p><b>Streaming</b> — better UX for the web interface. Stream tokens as they arrive from GPT-4o-mini. This also helps with perceived latency.</p>
+    </div>
+</div>
+
+<!-- 11. Framework Selection -->
+<h3>11. Framework Selection</h3>
+<div class="question">
+    <strong>LangChain vs LlamaIndex vs custom?</strong>
+    <table>
+        <tr><th>Framework</th><th>Status</th><th>Rationale</th></tr>
+        <tr>
+            <td>Custom pipeline</td>
+            <td><span class="tag tag-selected">SELECTED</span></td>
+            <td>Full control, no abstraction overhead, easier to debug and explain in interviews. Pipeline is simple enough (~200 lines of core logic).</td>
+        </tr>
+        <tr>
+            <td>LangChain</td>
+            <td><span class="tag tag-rejected">Rejected</span></td>
+            <td>Heavy abstraction for a straightforward pipeline. Learning curve under time pressure.</td>
+        </tr>
+        <tr>
+            <td>LlamaIndex</td>
+            <td><span class="tag tag-rejected">Rejected</span></td>
+            <td>Document-focused RAG is a good fit but still adds framework complexity. Custom is simpler.</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ============================================ -->
+<div class="phase-header">Phase 3: Post-Stack Refinement</div>
+
+<!-- 12. Failure Mode Analysis -->
+<h3>12. Failure Mode Analysis</h3>
+<div class="question">
+    <strong>What happens when retrieval finds nothing relevant?</strong>
+    <div class="answer">
+        <p>Check similarity scores — if all below a threshold (e.g., 0.3), return a "I couldn't find relevant code for this query" message instead of hallucinating. Suggest query reformulation.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>How to handle ambiguous queries?</strong>
+    <div class="answer">
+        <p>Return the top results with confidence scores and let the user judge. The LLM can note ambiguity in its response. For very short queries, could expand them with context (stretch goal).</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Rate limiting and error handling?</strong>
+    <div class="answer">
+        <p>OpenAI and Pinecone both have rate limits. Implement retry with exponential backoff for API calls. For the web UI, show user-friendly error messages. At our query volume, rate limits won't be an issue.</p>
+    </div>
+</div>
+
+<!-- 13. Evaluation Strategy -->
+<h3>13. Evaluation Strategy</h3>
+<div class="question">
+    <strong>How to measure retrieval precision?</strong>
+    <div class="answer">
+        <p>Create 10-15 ground-truth Q&A pairs (e.g., "Where is the main entry point?" → expect specific file/paragraph). Run queries, check if expected chunks appear in top-5. Report precision@5.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Ground truth dataset for testing?</strong>
+    <div class="answer">
+        <p>Hand-craft after ingestion. Study the GnuCOBOL codebase to create meaningful questions with known answers. Use the 6 testing scenarios from the assignment as a starting point.</p>
+    </div>
+</div>
+
+<!-- 14. Performance Optimization -->
+<h3>14. Performance Optimization</h3>
+<div class="question">
+    <strong>Caching strategy for embeddings?</strong>
+    <div class="answer">
+        <p>Cache query embeddings in-memory (LRU cache) for repeated queries. For ingestion, no caching needed — it's a one-time batch job.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Index optimization?</strong>
+    <div class="answer">
+        <p>Pinecone handles index optimization automatically. Choose cosine similarity metric (matches how text-embedding-3-small was trained). Use namespaces if indexing multiple codebases later.</p>
+    </div>
+</div>
+
+<!-- 15. Observability -->
+<h3>15. Observability</h3>
+<div class="question">
+    <strong>Logging for debugging retrieval issues?</strong>
+    <div class="answer">
+        <p>Log: query text, embedding time, Pinecone search time, top-k scores, selected chunks, LLM response time, total latency. Store in application logs (console in dev, structured JSON in production).</p>
+    </div>
+</div>
+<div class="question">
+    <strong>Metrics to track?</strong>
+    <div class="answer">
+        <p>Query latency (p50, p95), retrieval scores distribution, LLM token usage, error rates. Optional: LangSmith for tracing if needed.</p>
+    </div>
+</div>
+
+<!-- 16. Deployment & DevOps -->
+<h3>16. Deployment &amp; DevOps</h3>
+<div class="question">
+    <strong>Environment management?</strong>
+    <div class="answer">
+        <p>Environment variables via Vercel dashboard: <code>OPENAI_API_KEY</code>, <code>PINECONE_API_KEY</code>, <code>PINECONE_INDEX</code>. Local dev uses <code>.env.local</code>.</p>
+    </div>
+</div>
+<div class="question">
+    <strong>CI/CD for index updates?</strong>
+    <div class="answer">
+        <p>Not needed for MVP. Ingestion is a manual script run locally. Could add a GitHub Action for re-indexing as a stretch goal.</p>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<h2>Code Understanding Features Selection</h2>
+<p>The assignment requires implementing at least 4 of 8 code understanding features. Here's our selection and rationale:</p>
+<table>
+    <tr><th>Feature</th><th>Status</th><th>Rationale</th></tr>
+    <tr>
+        <td>Code Explanation</td>
+        <td><span class="tag tag-selected">SELECTED</span></td>
+        <td>Core value proposition — explain any function/paragraph in plain English. Reuses existing LLM pipeline with a different prompt.</td>
+    </tr>
+    <tr>
+        <td>Dependency Mapping</td>
+        <td><span class="tag tag-selected">SELECTED</span></td>
+        <td>Parse PERFORM/CALL statements to build call graphs. Shows understanding of COBOL structure. Very useful for navigation.</td>
+    </tr>
+    <tr>
+        <td>Documentation Generation</td>
+        <td><span class="tag tag-selected">SELECTED</span></td>
+        <td>Generate structured docs (purpose, I/O, side effects) for undocumented code. High value for legacy codebases.</td>
+    </tr>
+    <tr>
+        <td>Business Logic Extraction</td>
+        <td><span class="tag tag-selected">SELECTED</span></td>
+        <td>Identify and explain business rules in code. Unique to enterprise legacy code — impressive for interviews.</td>
+    </tr>
+    <tr>
+        <td>Pattern Detection</td>
+        <td><span class="tag tag-considered">Stretch</span></td>
+        <td>Find similar code patterns using embedding similarity. Valuable but less essential for demo.</td>
+    </tr>
+    <tr>
+        <td>Impact Analysis</td>
+        <td><span class="tag tag-considered">Stretch</span></td>
+        <td>"What would be affected if this code changes?" — requires deeper static analysis.</td>
+    </tr>
+    <tr>
+        <td>Translation Hints</td>
+        <td><span class="tag tag-considered">Stretch</span></td>
+        <td>Modern language equivalents. Nice to have but not core to the RAG story.</td>
+    </tr>
+    <tr>
+        <td>Bug Pattern Search</td>
+        <td><span class="tag tag-considered">Stretch</span></td>
+        <td>Find potential issues based on known patterns. Requires curated pattern library.</td>
+    </tr>
+</table>
+
+<!-- ============================================ -->
+<h2>Conversation Summary</h2>
+<p>This Pre-Search document was generated through an AI-assisted architecture planning session. Below is a high-level summary of the key discussion points and decisions made:</p>
+
+<div class="question">
+    <strong>Initial Discussion: Project Scope &amp; Codebase Selection</strong>
+    <div class="answer">
+        <p>We began by reading the full assignment and discussing codebase options. The initial preference was for a Fortran linear algebra library (LAPACK/BLAS), but we decided on <b>GnuCOBOL</b> instead — COBOL's distinctive syntax structure (divisions, sections, paragraphs) creates a richer chunking story, and the assignment emphasizes COBOL prominently. GnuCOBOL meets the 10K+ LOC minimum with over 100K lines.</p>
+    </div>
+</div>
+
+<div class="question">
+    <strong>Tech Stack Decisions</strong>
+    <div class="answer">
+        <p>Developer preference for Node.js led to choosing <b>Next.js</b> (full-stack in one framework) over a separate React + Express setup. <b>Pinecone</b> was selected due to an existing account and familiarity. <b>OpenAI text-embedding-3-small</b> was chosen because of existing API credits, and <b>GPT-4o-mini</b> for answer generation for the same reason. We decided against LangChain — the pipeline is simple enough to build custom (~200 lines), which gives full control and is better for interviews.</p>
+    </div>
+</div>
+
+<div class="question">
+    <strong>Deployment &amp; Architecture Approach</strong>
+    <div class="answer">
+        <p><b>Vercel</b> was chosen over Railway for deployment simplicity — one repo, one deployment with Next.js. The target codebase lives outside the LegacyLens repo; the ingestion script points at a local clone. MVP uses batch ingestion only (no incremental updates). Streaming responses from GPT-4o-mini for better UX.</p>
+    </div>
+</div>
+
+<div class="question">
+    <strong>Performance Testing Strategy</strong>
+    <div class="answer">
+        <p>For measuring ingestion throughput (10K+ LOC in &lt;5 min target), we'll use GnuCOBOL itself as the benchmark — no need for synthetic test data. A test harness will time each pipeline stage and support <code>--dry-run</code> (skip Pinecone) and <code>--clear</code> (wipe index) flags for repeatable measurements. For retrieval precision (&gt;70% in top-5), we'll create 10-15 hand-crafted Q&amp;A pairs based on the 6 testing scenarios in the assignment.</p>
+    </div>
+</div>
+
+<div class="question">
+    <strong>Feature Selection &amp; Milestone Planning</strong>
+    <div class="answer">
+        <p>We selected 4 code understanding features for the required submission: Code Explanation, Dependency Mapping, Documentation Generation, and Business Logic Extraction. These were chosen for their direct value to legacy code navigation and interview impact. Pattern Detection, Impact Analysis, Translation Hints, and Bug Pattern Search were moved to a Stretch milestone. Project management is tracked in Linear with 3 milestones: MVP (11 issues, Mar 1), Final Submission (9 issues, Mar 6), and Stretch.</p>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<h2>Final Architecture Summary</h2>
+<table>
+    <tr><th>Component</th><th>Choice</th></tr>
+    <tr><td>Target Codebase</td><td>GnuCOBOL (COBOL compiler, 100K+ LOC)</td></tr>
+    <tr><td>Vector Database</td><td>Pinecone (managed, free tier)</td></tr>
+    <tr><td>Embedding Model</td><td>OpenAI text-embedding-3-small (1536 dims)</td></tr>
+    <tr><td>LLM</td><td>GPT-4o-mini (streaming)</td></tr>
+    <tr><td>RAG Framework</td><td>Custom (no LangChain/LlamaIndex)</td></tr>
+    <tr><td>Backend</td><td>Next.js API routes (TypeScript)</td></tr>
+    <tr><td>Frontend</td><td>Next.js + React</td></tr>
+    <tr><td>Deployment</td><td>Vercel</td></tr>
+    <tr><td>Chunking</td><td>Syntax-aware (COBOL divisions/paragraphs) + fixed-size fallback</td></tr>
+    <tr><td>Eval</td><td>10-15 hand-crafted Q&A pairs, precision@5</td></tr>
+</table>
+
+<footer>
+    <p>LegacyLens Pre-Search Document — Generated during architecture planning session</p>
+    <p>This document captures the AI-assisted exploration of RAG architecture options for the LegacyLens project.</p>
+</footer>
+
+</body>
+</html>
