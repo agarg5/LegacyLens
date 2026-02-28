@@ -2,9 +2,11 @@ import { NextRequest } from "next/server";
 import { openai, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL } from "@/lib/openai";
 import { getIndex } from "@/lib/pinecone";
 import { rerankResults } from "@/lib/rerank";
+import { noRelevantResultsResponse } from "@/lib/quality-gate";
 import type { CodeChunk, SearchResult } from "@/lib/types";
 
 const TOP_K = 5;
+const PINECONE_SCORE_THRESHOLD = 0.3;
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,6 +52,12 @@ export async function POST(req: NextRequest) {
         score: m.score ?? 0,
       };
     });
+
+    // Quality gate: skip rerank + LLM if Pinecone scores are too low
+    const topPineconeScore = candidates[0]?.score ?? 0;
+    if (candidates.length === 0 || topPineconeScore < PINECONE_SCORE_THRESHOLD) {
+      return noRelevantResultsResponse();
+    }
 
     const results = await rerankResults(query, candidates, topK);
 

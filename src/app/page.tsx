@@ -228,7 +228,7 @@ function HomeContent() {
           />
         </div>
 
-        {/* Active Question */}
+        {/* Question */}
         {activeQuery && (
           <div className="mb-6">
             <QuestionDisplay query={activeQuery} mode={activeMode} />
@@ -248,7 +248,7 @@ function HomeContent() {
             <AnswerPanel
               answer={answer}
               isStreaming={isStreaming}
-              title={ANSWER_TITLES[mode]}
+              title={ANSWER_TITLES[activeMode]}
             />
             {latencyMs !== null && (
               <p className="mt-2 text-right text-xs text-zinc-400">
