@@ -2,10 +2,12 @@ import { NextRequest } from "next/server";
 import { openai, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL } from "@/lib/openai";
 import { getIndex } from "@/lib/pinecone";
 import { rerankResults } from "@/lib/rerank";
+import { noRelevantResultsResponse } from "@/lib/quality-gate";
 import type { CodeChunk, SearchResult, AnalysisMode } from "@/lib/types";
 import { MODE_CONFIGS } from "@/lib/prompts";
 
 const VALID_MODES = new Set<AnalysisMode>(["explain", "dependencies", "documentation", "business-logic"]);
+const PINECONE_SCORE_THRESHOLD = 0.3;
 
 export async function POST(req: NextRequest) {
   try {
@@ -64,40 +66,14 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    // Quality gate: skip rerank + LLM if Pinecone scores are too low
+    const topPineconeScore = candidates[0]?.score ?? 0;
+    if (candidates.length === 0 || topPineconeScore < PINECONE_SCORE_THRESHOLD) {
+      return noRelevantResultsResponse();
+    }
+
     // Re-rank using raw query (not searchQuery with mode prefix)
     const results = await rerankResults(query, candidates, topK);
-
-    // Quality gate: skip LLM if retrieval is irrelevant
-    const RERANK_THRESHOLD = 3;
-    const PINECONE_THRESHOLD = 0.3;
-    const topResult = results[0];
-    const topScore = topResult?.rerankScore ?? topResult?.score ?? 0;
-    const threshold = topResult?.rerankScore !== undefined ? RERANK_THRESHOLD : PINECONE_THRESHOLD;
-
-    if (!topResult || topScore < threshold) {
-      const encoder = new TextEncoder();
-      const readable = new ReadableStream({
-        start(controller) {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "sources", results: [] })}\n\n`),
-          );
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ type: "token", content: "No relevant code found for this query. Try being more specific or using terms from the codebase (e.g., file names, COBOL keywords, or program identifiers)." })}\n\n`,
-            ),
-          );
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
-          controller.close();
-        },
-      });
-      return new Response(readable, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    }
 
     // Step 2: Build context for LLM
     const context = results
