@@ -15,13 +15,24 @@ export default function AnswerPanel({ answer, isStreaming, title }: AnswerPanelP
         {title ?? "Answer"}
       </h2>
       <div className="prose prose-zinc max-w-none text-zinc-800 dark:prose-invert dark:text-zinc-200">
-        {answer.split("\n").map((line, i) => (
-          <p key={i} className={line === "" ? "h-2" : ""}>
-            {line}
-          </p>
-        ))}
-        {isStreaming && (
-          <span className="inline-block h-4 w-1.5 animate-pulse bg-blue-500" />
+        {isStreaming && !answer ? (
+          <div className="space-y-3">
+            <div className="h-3 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-3 w-[85%] animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-3 w-[70%] animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+            <div className="h-3 w-[40%] animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+          </div>
+        ) : (
+          <>
+            {answer.split("\n").map((line, i) => (
+              <p key={i} className={line === "" ? "h-2" : ""}>
+                {line}
+              </p>
+            ))}
+            {isStreaming && (
+              <span className="inline-block h-4 w-1.5 animate-pulse bg-blue-500" />
+            )}
+          </>
         )}
       </div>
     </div>
