@@ -58,6 +58,9 @@ function HomeContent() {
     null,
   );
   const [activeQuery, setActiveQuery] = useState(urlQuery);
+  const [activeMode, setActiveMode] = useState<Mode>(
+    isValidMode(urlMode) ? urlMode : "query",
+  );
 
   const runQuery = useCallback(
     async (query: string, currentMode: Mode) => {
@@ -137,6 +140,7 @@ function HomeContent() {
       if (mode !== "query") params.set("mode", mode);
       router.push(`/?${params.toString()}`);
       setActiveQuery(query);
+      setActiveMode(mode);
       runQuery(query, mode);
     },
     [mode, router, runQuery],
@@ -163,6 +167,7 @@ function HomeContent() {
       const initialMode = isValidMode(urlMode) ? urlMode : "query";
       setMode(initialMode);
       setActiveQuery(urlQuery);
+      setActiveMode(initialMode);
       runQuery(urlQuery, initialMode);
     }
     // Only run on mount
@@ -176,9 +181,10 @@ function HomeContent() {
       ? (searchParams.get("mode") as Mode)
       : "query";
 
-    if (currentQ && currentQ !== activeQuery) {
+    if (currentQ && (currentQ !== activeQuery || currentMode !== activeMode)) {
       setMode(currentMode);
       setActiveQuery(currentQ);
+      setActiveMode(currentMode);
       runQuery(currentQ, currentMode);
     } else if (!currentQ && activeQuery) {
       // User navigated back to empty state
