@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
@@ -8,6 +9,14 @@ import ModeSelector from "@/components/ModeSelector";
 import FileContextPanel from "@/components/FileContextPanel";
 import type { Mode } from "@/components/ModeSelector";
 import type { SearchResult } from "@/lib/types";
+
+const VALID_MODES: Mode[] = [
+  "query",
+  "explain",
+  "dependencies",
+  "documentation",
+  "business-logic",
+];
 
 const PLACEHOLDERS: Record<Mode, string> = {
   query: "Ask about the GnuCOBOL codebase...",
@@ -25,79 +34,162 @@ const ANSWER_TITLES: Record<Mode, string> = {
   "business-logic": "Business Logic",
 };
 
-export default function Home() {
-  const [mode, setMode] = useState<Mode>("query");
+function isValidMode(value: string | null): value is Mode {
+  return value !== null && VALID_MODES.includes(value as Mode);
+}
+
+function HomeContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const urlQuery = searchParams.get("q") ?? "";
+  const urlMode = searchParams.get("mode");
+
+  const [mode, setMode] = useState<Mode>(
+    isValidMode(urlMode) ? urlMode : "query",
+  );
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(
+    null,
+  );
+  const [activeQuery, setActiveQuery] = useState(urlQuery);
 
-  const handleSearch = useCallback(async (query: string) => {
-    setIsLoading(true);
-    setIsStreaming(true);
-    setResults([]);
-    setAnswer("");
-    setLatencyMs(null);
-    setError(null);
-    setSelectedResult(null);
+  const runQuery = useCallback(
+    async (query: string, currentMode: Mode) => {
+      setIsLoading(true);
+      setIsStreaming(true);
+      setResults([]);
+      setAnswer("");
+      setLatencyMs(null);
+      setError(null);
+      setSelectedResult(null);
 
-    const start = Date.now();
+      const start = Date.now();
 
-    try {
-      const isAnalyze = mode !== "query";
-      const endpoint = isAnalyze ? "/api/analyze/stream" : "/api/query/stream";
-      const body = isAnalyze ? { query, mode } : { query };
+      try {
+        const isAnalyze = currentMode !== "query";
+        const endpoint = isAnalyze
+          ? "/api/analyze/stream"
+          : "/api/query/stream";
+        const body = isAnalyze
+          ? { query, mode: currentMode }
+          : { query };
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? `HTTP ${res.status}`);
-      }
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error ?? `HTTP ${res.status}`);
+        }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response stream");
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() ?? "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() ?? "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6);
-          const event = JSON.parse(json);
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const json = line.slice(6);
+            const event = JSON.parse(json);
 
-          if (event.type === "sources") {
-            setResults(event.results);
-            setIsLoading(false);
-          } else if (event.type === "token") {
-            setAnswer((prev) => prev + event.content);
-          } else if (event.type === "done") {
-            setLatencyMs(Date.now() - start);
+            if (event.type === "sources") {
+              setResults(event.results);
+              setIsLoading(false);
+            } else if (event.type === "token") {
+              setAnswer((prev) => prev + event.content);
+            } else if (event.type === "done") {
+              setLatencyMs(Date.now() - start);
+            }
           }
         }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Something went wrong");
+      } finally {
+        setIsLoading(false);
+        setIsStreaming(false);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
+    },
+    [],
+  );
+
+  const handleSearch = useCallback(
+    (query: string) => {
+      const params = new URLSearchParams();
+      params.set("q", query);
+      if (mode !== "query") params.set("mode", mode);
+      router.push(`/?${params.toString()}`);
+      setActiveQuery(query);
+      runQuery(query, mode);
+    },
+    [mode, router, runQuery],
+  );
+
+  const handleModeChange = useCallback(
+    (newMode: Mode) => {
+      setMode(newMode);
+      const params = new URLSearchParams(searchParams.toString());
+      if (newMode === "query") {
+        params.delete("mode");
+      } else {
+        params.set("mode", newMode);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `/?${qs}` : "/");
+    },
+    [router, searchParams],
+  );
+
+  // Auto-run query from URL on mount
+  useEffect(() => {
+    if (urlQuery) {
+      const initialMode = isValidMode(urlMode) ? urlMode : "query";
+      setMode(initialMode);
+      setActiveQuery(urlQuery);
+      runQuery(urlQuery, initialMode);
     }
-  }, [mode]);
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle back/forward navigation
+  useEffect(() => {
+    const currentQ = searchParams.get("q") ?? "";
+    const currentMode = isValidMode(searchParams.get("mode"))
+      ? (searchParams.get("mode") as Mode)
+      : "query";
+
+    if (currentQ && currentQ !== activeQuery) {
+      setMode(currentMode);
+      setActiveQuery(currentQ);
+      runQuery(currentQ, currentMode);
+    } else if (!currentQ && activeQuery) {
+      // User navigated back to empty state
+      setActiveQuery("");
+      setResults([]);
+      setAnswer("");
+      setLatencyMs(null);
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -114,7 +206,7 @@ export default function Home() {
 
         {/* Mode Selector */}
         <div className="mb-4">
-          <ModeSelector mode={mode} onModeChange={setMode} />
+          <ModeSelector mode={mode} onModeChange={handleModeChange} />
         </div>
 
         {/* Search */}
@@ -123,6 +215,7 @@ export default function Home() {
             onSearch={handleSearch}
             isLoading={isLoading}
             placeholder={PLACEHOLDERS[mode]}
+            initialQuery={urlQuery}
           />
         </div>
 
@@ -178,5 +271,13 @@ export default function Home() {
         />
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
   );
 }
