@@ -1,25 +1,19 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 interface SearchInputProps {
   onSearch: (query: string) => void;
   isLoading: boolean;
   placeholder?: string;
-  initialQuery?: string;
 }
 
 export default function SearchInput({
   onSearch,
   isLoading,
   placeholder,
-  initialQuery = "",
 }: SearchInputProps) {
-  const [query, setQuery] = useState(initialQuery);
-
-  useEffect(() => {
-    setQuery(initialQuery);
-  }, [initialQuery]);
+  const [query, setQuery] = useState("");
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -27,6 +21,7 @@ export default function SearchInput({
       const trimmed = query.trim();
       if (trimmed && !isLoading) {
         onSearch(trimmed);
+        setQuery("");
       }
     },
     [query, isLoading, onSearch],
