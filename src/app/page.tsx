@@ -6,6 +6,7 @@ import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
 import ModeSelector from "@/components/ModeSelector";
+import QuestionDisplay from "@/components/QuestionDisplay";
 import FileContextPanel from "@/components/FileContextPanel";
 import type { Mode } from "@/components/ModeSelector";
 import type { SearchResult } from "@/lib/types";
@@ -149,22 +150,19 @@ function HomeContent() {
   const handleModeChange = useCallback(
     (newMode: Mode) => {
       setMode(newMode);
-      const params = new URLSearchParams(searchParams.toString());
-      if (newMode === "query") {
-        params.delete("mode");
-      } else {
-        params.set("mode", newMode);
-      }
-      const qs = params.toString();
-      router.replace(qs ? `/?${qs}` : "/");
 
-      // Re-run query with new mode if results are already showing
+      // Clear current results so user submits fresh in the new mode
       if (activeQuery) {
-        setActiveMode(newMode);
-        runQuery(activeQuery, newMode);
+        setActiveQuery("");
+        setResults([]);
+        setAnswer("");
+        setLatencyMs(null);
+        setError(null);
+        setSelectedResult(null);
+        router.replace("/");
       }
     },
-    [router, searchParams, activeQuery, runQuery],
+    [router, activeQuery],
   );
 
   // Auto-run query from URL on mount
@@ -227,9 +225,15 @@ function HomeContent() {
             onSearch={handleSearch}
             isLoading={isLoading}
             placeholder={PLACEHOLDERS[mode]}
-            initialQuery={urlQuery}
           />
         </div>
+
+        {/* Active Question */}
+        {activeQuery && (
+          <div className="mb-6">
+            <QuestionDisplay query={activeQuery} mode={activeMode} />
+          </div>
+        )}
 
         {/* Error */}
         {error && (
