@@ -6,6 +6,7 @@ import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
 import ModeSelector from "@/components/ModeSelector";
+import QuestionDisplay from "@/components/QuestionDisplay";
 import FileContextPanel from "@/components/FileContextPanel";
 import type { Mode } from "@/components/ModeSelector";
 import type { SearchResult } from "@/lib/types";
@@ -227,9 +228,15 @@ function HomeContent() {
             onSearch={handleSearch}
             isLoading={isLoading}
             placeholder={PLACEHOLDERS[mode]}
-            initialQuery={urlQuery}
           />
         </div>
+
+        {/* Question */}
+        {activeQuery && (
+          <div className="mb-6">
+            <QuestionDisplay query={activeQuery} mode={activeMode} />
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -244,7 +251,7 @@ function HomeContent() {
             <AnswerPanel
               answer={answer}
               isStreaming={isStreaming}
-              title={ANSWER_TITLES[mode]}
+              title={ANSWER_TITLES[activeMode]}
             />
             {latencyMs !== null && (
               <p className="mt-2 text-right text-xs text-zinc-400">
