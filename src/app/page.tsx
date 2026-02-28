@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import SearchInput from "@/components/SearchInput";
 import CodeSnippet from "@/components/CodeSnippet";
 import AnswerPanel from "@/components/AnswerPanel";
@@ -34,8 +34,11 @@ export default function Home() {
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  const lastQueryRef = useRef<string>("");
+  const prevModeRef = useRef<Mode>(mode);
 
   const handleSearch = useCallback(async (query: string) => {
+    lastQueryRef.current = query;
     setIsLoading(true);
     setIsStreaming(true);
     setResults([]);
@@ -98,6 +101,16 @@ export default function Home() {
       setIsStreaming(false);
     }
   }, [mode]);
+
+  // Re-run query when mode changes and results are already showing
+  useEffect(() => {
+    if (prevModeRef.current !== mode) {
+      prevModeRef.current = mode;
+      if (lastQueryRef.current && (results.length > 0 || answer)) {
+        handleSearch(lastQueryRef.current);
+      }
+    }
+  }, [mode, handleSearch, results.length, answer]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
