@@ -150,22 +150,19 @@ function HomeContent() {
   const handleModeChange = useCallback(
     (newMode: Mode) => {
       setMode(newMode);
-      const params = new URLSearchParams(searchParams.toString());
-      if (newMode === "query") {
-        params.delete("mode");
-      } else {
-        params.set("mode", newMode);
-      }
-      const qs = params.toString();
-      router.replace(qs ? `/?${qs}` : "/");
 
-      // Re-run query with new mode if results are already showing
+      // Clear current results so user submits fresh in the new mode
       if (activeQuery) {
-        setActiveMode(newMode);
-        runQuery(activeQuery, newMode);
+        setActiveQuery("");
+        setResults([]);
+        setAnswer("");
+        setLatencyMs(null);
+        setError(null);
+        setSelectedResult(null);
+        router.replace("/");
       }
     },
-    [router, searchParams, activeQuery, runQuery],
+    [router, activeQuery],
   );
 
   // Auto-run query from URL on mount
