@@ -157,8 +157,14 @@ function HomeContent() {
       }
       const qs = params.toString();
       router.replace(qs ? `/?${qs}` : "/");
+
+      // Re-run query with new mode if results are already showing
+      if (activeQuery) {
+        setActiveMode(newMode);
+        runQuery(activeQuery, newMode);
+      }
     },
-    [router, searchParams],
+    [router, searchParams, activeQuery, runQuery],
   );
 
   // Auto-run query from URL on mount
